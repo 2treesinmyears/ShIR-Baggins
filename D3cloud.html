@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>D3 cloud</title>
+<script type="text/javascript" src="http://code.jquery.com/jquery-2.1.0.min.js" >
+     </script>
+<script type="text/javascript" src="http://d3js.org/d3.v3.min.js"></script> 
+
+<script type="text/javascript" id="brown">
+
+window.onload = function() {
+	var count = Math.random() * 300 + 1;
+	var dataset = [];
+	var speedset = [];
+	var speedAbs = [];
+
+	var $window = $(window);
+	var maxwidth = $window.width();
+	var maxheight = $window.height();
+	var colorLock = {}, movementLock = {};
+	var mousePos = {};
+	for ( var i = 0; i <= count + 1; i++) {
+		var coord = [ Math.round(Math.random() * maxwidth),
+				Math.round(Math.random() * maxheight) ];
+		var speed = [ Math.round(Math.random() * 20),
+				Math.round(Math.random() * 20) ];
+
+		dataset.push(coord);
+		speedset.push(speed);
+		speedAbs.push(getSpeedAbs(speed));
+	}
+
+	var mouse = {
+		isInside : true,
+		coord : []
+	};
+
+	var body = d3.select('body');
+	body.style("background", "black").style({
+		position : 'absolute',
+		bottom : 0,
+		right : 0,
+		top : 0,
+		left : 0
+	});
+
+	var cloud = body.append("svg").style({
+		height : '100%',
+		width : '100%',
+		border : '2px grey'
+	});
+
+	var rect = cloud.append("rect").attr("width", "100%")
+			.attr("height", "100%").attr("opacity", "0").on("mousemove",
+					function() {
+						mouse.isInside = true;
+						mouse.coord = d3.mouse(this);
+					}).on("mouseout", function() {
+				mouse.isInside = false;
+			}).on("mouseenter", function() {
+				mouse.isInside = true;
+			}).on("mouseover", function() {
+				mouse.isInside = true;
+			});
+
+	var circles = cloud.selectAll("circle").data(dataset);
+
+	circles.enter().append("circle").attr("cy", function(d) {
+		return d[1] + "px";
+	}).attr("cx", function(d) {
+		return d[0] + "px";
+	}).attr("r", 5).attr("fill", "red").call(beginMovement, dataset, speedset,
+			speedAbs, $window);
+
+	cloud.selectAll("circle").call(beginColorTransition, 3000);
+
+	function beginColorTransition(circles, duration) {
+
+		d3.select(colorLock).transition().duration(duration).tween("attr:fill",
+				function() {
+					var i = interpolateRgbSquare('red', 'yellow');
+					return function(t) {
+						circles.attr("fill", i(t));
+					};
+				}).transition().tween("attr:fill", function() {
+			var i = interpolateRgbSquare('yellow', 'red');
+			return function(t) {
+				circles.attr("fill", i(t));
+			};
+		});
+		setTimeout(function() {
+			beginColorTransition(circles, duration);
+		}, 2 * duration);
+	}
+	;
+
+	function beginMovement(circles, dataset, speedset, speedAbs, window) {
+		var vx, vy;
+
+		var maxwidth = window.width();
+		var maxheight = window.height();
+		var N = dataset.length;
+		var R = 5;
+
+		var change = [];// oldX, oldY, newX, newY
+
+		for ( var i = 0; i < N; i++) {
+			var ch = [ dataset[i][0], dataset[i][1] ];
+			dataset[i][0] += speedset[i][0];
+			dataset[i][1] += speedset[i][1];
+			ch.push(dataset[i][0]);
+			ch.push(dataset[i][1]);
+			change.push(ch);
+		}
+
+		for ( var i = 0; i < N - 1; i++) {
+			for ( var j = i + 1; j < N; j++) {
+				if (((dataset[i][0] - dataset[j][0])
+						* (dataset[i][0] - dataset[j][0]) + (dataset[i][1] - dataset[j][1])
+						* (dataset[i][1] - dataset[j][1])) < 4 * R * R) {
+					vx = speedset[i][0];
+					vy = speedset[i][1];
+					speedset[i][0] = speedset[j][0];
+					speedset[i][1] = speedset[j][1];
+					speedset[j][0] = vx;
+					speedset[j][1] = vy;
+				}
+			}
+		}
+
+		for ( var i = 0; i < N; i++) {
+			if (dataset[i][0] < 2*R)
+				speedset[i][0] = Math.abs(speedset[i][0]);
+			else if (dataset[i][0] > maxwidth - 2*R)
+				speedset[i][0] = -Math.abs(speedset[i][0]);
+			if (dataset[i][1] < 2*R)
+				speedset[i][1] = Math.abs(speedset[i][1]);
+			else if (dataset[i][1] > maxheight - 2*R)
+				speedset[i][1] = -Math.abs(speedset[i][1]);
+		}
+		var radius = 150, speed = 70;
+
+		if (mouse.isInside && mouse.coord.length != 0) {
+			var mouseX = mouse.coord[0];
+			var mouseY = mouse.coord[1];
+			for ( var i = 0; i < N; i++) {
+				var dist = Math.sqrt(((dataset[i][0] - mouseX)
+						* (dataset[i][0] - mouseX) + (dataset[i][1] - mouseY)
+						* (dataset[i][1] - mouseY)));
+				if (dist < radius) {
+					var mousespeed = [
+							Math.round(speed * (dataset[i][0] - mouseX)
+									/ (dist + 1)),
+							Math.round(speed * (dataset[i][1] - mouseY)
+									/ (dist + 1)) ];
+					speedset[i][0] += mousespeed[0];
+					speedset[i][1] += mousespeed[1];
+					var mouseSpeedAbs = getSpeedAbs(speedset[i]);
+					speedset[i][0] = speedset[i][0]* speedAbs[i] / mouseSpeedAbs; 
+					speedset[i][1] = speedset[i][1]* speedAbs[i] / mouseSpeedAbs; 
+				} 
+			}
+		} 
+		
+		d3.select(movementLock).datum(change).transition().ease("linear")
+				.duration(100).tween("attr:cy", function(d, j) {
+					var i = [];
+					for ( var j = 0; j < N; j++) {
+						i.push(d3.interpolateNumber(d[j][1], d[j][3]));
+					}
+					return function(t) {
+						circles.each(function(p, k) {
+							d3.select(this).attr("cy", (i[k])(t) + "px");
+						});
+					};
+				}).tween("attr:cx", function(d, j) {
+					var i = [];
+					for ( var j = 0; j < N; j++) {
+						i.push(d3.interpolateNumber(d[j][0], d[j][2]));
+					}
+					return function(t) {
+						circles.each(function(p, k) {
+							d3.select(this).attr("cx", (i[k])(t) + "px");
+						});
+					};
+				});
+
+		setTimeout(function() {
+			beginMovement(circles, dataset, speedset, speedAbs, window);
+		}, 100);
+
+	}
+	;
+}
+function getSpeedAbs(speed) {
+	return Math.sqrt(speed[0] * speed[0] + speed[1] * speed[1]);
+
+}
+
+function d3_rgb_hex(v) {
+	return v < 16 ? "0" + Math.max(0, v).toString(16) : Math.min(255, v)
+			.toString(16);
+}
+function interpolateRgbSquare(a, b) {
+	a = d3.rgb(a);
+	b = d3.rgb(b);
+	var ar = a.r, ag = a.g, ab = a.b, br = b.r - ar, bg = b.g - ag, bb = b.b
+			- ab;
+
+	return function(t) {
+		var result = "#" + d3_rgb_hex(Math.round(ar + br * t * t))
+				+ d3_rgb_hex(Math.round(ag + bg * t * t))
+				+ d3_rgb_hex(Math.round(ab + bb * t * t));
+		return result;
+	};
+}
+</script>
+</head>
+<body>
+	
+</body>
+</html>
+
