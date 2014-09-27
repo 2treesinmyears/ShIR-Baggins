@@ -2,7 +2,9 @@
 <html>
 <head>
 <title>Equalizr</title>
-<script type="text/javascript" src="http://code.jquery.com/jquery-2.1.0.min.js"></script>
+<script type="text/javascript"
+	src="http://code.jquery.com/jquery-2.1.0.min.js"></script>
+<script type="text/javascript" src="http://d3js.org/d3.v3.min.js"></script>
 <style>
 .equalizer-wrapper {
 	float: left;
@@ -28,79 +30,192 @@
 	width: 300px;
 	height: 300px;
 }
+
+#layout td {
+	vertical-align: top;
+}
 </style>
 <script type="text/javascript">
-function setEqualizer(selector, timeout, colWidth) {
-	if (!colWidth) {
-		colWidth = 1;
-	}
-	$(selector).css({
-		verticalAlign : 'bottom',
-		lineHeight : $(selector).height() + 'px'
-	});
-
-	var colQuantity = Math.ceil($(selector).width() / colWidth);
-	var cols = new Array(colQuantity);
-	for (var i = 0; i < cols.length; i++) {
-		var span = $('<span/>').appendTo(selector);
-		span.css({
+	function setEqualizer(selector, timeout, colWidth) {
+		if (!colWidth) {
+			colWidth = 1;
+		}
+		var height = $(selector).height();
+		$(selector).css({
 			verticalAlign : 'bottom',
-			display : 'inline-block',
-			fontSize : 0,
-			lineHeight : 0,
-			width : colWidth,
-			background : 'pink',
-			borderTop : '2px solid red'
+			lineHeight : height + 'px'
 		});
+		var colQuantity = Math.ceil($(selector).width() / colWidth);
+		var cols = new Array(colQuantity);
+		for (var i = 0; i < cols.length; i++) {
+			var span = $('<span/>').appendTo(selector);
+			span.css({
+				verticalAlign : 'bottom',
+				display : 'inline-block',
+				width : colWidth,
+				background : 'pink',
+				borderTop : '2px solid red',
+				height : height / 2
+			});
+		}
+		var spans = $(selector + ' span');
+		run_equalizer(spans, height, timeout);
 	}
-	run_equalizer(selector, timeout);
-}
-function run_equalizer(selector, timeout) {
-	$(selector + ' span').each(function(i) {
-		var colHeight = $(selector).height() / 2;
-		$(this).height(colHeight);
-		
-		$(this).animate({
-			height :  Math.round($(selector).height() * Math.random())
+	function run_equalizer(spans, ht, timeout) {
+		var colHeight = ht / 2;
+		spans.each(function(i) {
+			$(this).animate({
+				height : Math.round(ht * Math.random())
+			}, {
+				easing : 'linear',
+				duration : timeout
+			});
+		});
+		spans.animate({
+			height : colHeight
 		}, {
 			easing : 'linear',
-			duration : timeout
+			duration : timeout,
+
+		});
+		setTimeout(function() {
+			run_equalizer(spans, ht, timeout);
+		}, 2 * timeout);
+	}
+	function setEqualizerD3(selector, timeout, colWidth) {
+		var height = $(selector).height();
+		var equalizer = d3.select(selector);
+
+		var graphics = equalizer.append("svg").style({
+			height : '100%',
+			width : '100%'
 		});
 
-	});
-	$(selector + ' span').animate({
-		height :  $(selector).height() / 2
-	}, {
-		easing : 'linear',
-		duration : timeout
-	});
+		var colQuantity = Math.ceil($(selector).width() / colWidth);
+		var cols = new Array(colQuantity);
 
+		var dataset = new Array(colQuantity);
+		var strokeA = colWidth + "," + height + ",0," + colWidth + ",0,"
+				+ height;
 
-	setTimeout(function() {
-		run_equalizer(selector, timeout);
-	}, 2*timeout);
-}
-window.onload = function() {
-	setEqualizer('#eq_1 .equalizer', 1000, 2);
-	setEqualizer('#eq_2 .equalizer', 1000, 2);
-	setEqualizer('#eq_3 .equalizer', 1000, 2);
-} 
+		var commonStyle = {
+			fill : "pink",
+			"stroke-dasharray" : strokeA,
+			stroke : "red",
+			"stroke-width" : "2",
+		};
+		graphics.selectAll("rect").data(dataset).enter().append("rect").attr(
+				"width", colWidth).attr("height", height).attr("x",
+				function(d, i) {
+					return i * colWidth;
+				}).attr("y", height / 2).style(commonStyle);
+
+		var movementLock = {};
+		graphics.selectAll("rect").call(beginMovement, height, 1000);
+
+		function beginMovement(rects, height, duration) {
+
+			var change = [];
+			rects.each(function() {
+				var y = Math.round(Math.random() * height);
+				change.push(y);
+			});
+			var N = change.length;
+
+			d3.select(movementLock).datum(change).transition().ease("linear")
+					.duration(duration).tween("attr:y", function(d, j) {
+						var i = [];
+						for (var j = 0; j < N; j++) {
+							i.push(d3.interpolateNumber(height / 2, d[j]));
+						}
+						return function(t) {
+							rects.each(function(p, k) {
+								d3.select(this).attr("y", (i[k])(t));
+							});
+						};
+					}).transition().tween("attr:y", function(d, j) {
+						var i = [];
+						for (var j = 0; j < N; j++) {
+							i.push(d3.interpolateNumber(d[j], height / 2));
+						}
+						return function(t) {
+							rects.each(function(p, k) {
+								d3.select(this).attr("y", (i[k])(t));
+							});
+						};
+					});
+			setTimeout(function() {
+				beginMovement(rects, height, duration);
+			}, 2 * duration);
+
+		}
+	}
+
+	jQuery(document).ready(function() {
+		setEqualizer('#eq_1 .equalizer', 1000, 2);
+		setEqualizer('#eq_2 .equalizer', 1000, 2);
+		setEqualizer('#eq_3 .equalizer', 1000, 2);
+
+		setEqualizerD3('#eq_4 .equalizer', 1000, 2);
+		setEqualizerD3('#eq_5 .equalizer', 1000, 2);
+		setEqualizerD3('#eq_6 .equalizer', 1000, 2);
+	});
 </script>
 </head>
 <body>
 	<h1>Equalizers</h1>
 
-	<div id="eq_1" class="equalizer-wrapper">
-		<h2>First</h2>
-		<div class="equalizer small"></div>
-	</div>
-	<div id="eq_2" class="equalizer-wrapper">
-		<h2>Second</h2>
-		<div class="equalizer normal"></div>
-	</div>
-	<div id="eq_3" class="equalizer-wrapper">
-		<h2>Third</h2>
-		<div class="equalizer big"></div>
-	</div>
+	<table id="layout">
+		<tbody>
+			<tr>
+				<th colspan="3">Old layout, usage of jQuery .animate() function</th>
+			</tr>
+			<tr>
+				<td>
+					<div id="eq_1" class="equalizer-wrapper">
+						<h2>First</h2>
+						<div class="equalizer small"></div>
+					</div>
+				</td>
+				<td>
+					<div id="eq_2" class="equalizer-wrapper">
+						<h2>Second</h2>
+						<div class="equalizer normal"></div>
+					</div>
+				</td>
+				<td>
+					<div id="eq_3" class="equalizer-wrapper">
+						<h2>Third</h2>
+						<div class="equalizer big"></div>
+					</div>
+				</td>
+			</tr>
+
+			<tr>
+				<th colspan="3">New layout, usage of d3.js</th>
+			</tr>
+			<tr>
+				<td>
+					<div id="eq_4" class="equalizer-wrapper">
+						<h2>Fourth</h2>
+						<div class="equalizer small"></div>
+					</div>
+				</td>
+				<td>
+					<div id="eq_5" class="equalizer-wrapper">
+						<h2>Fifth</h2>
+						<div class="equalizer normal"></div>
+					</div>
+				</td>
+				<td>
+					<div id="eq_6" class="equalizer-wrapper">
+						<h2>Sixth</h2>
+						<div class="equalizer big"></div>
+					</div>
+				</td>
+			</tr>
+		</tbody>
+	</table>
+
 </body>
 </html>
